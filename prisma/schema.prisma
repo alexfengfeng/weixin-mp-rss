@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+model MpAccount {
+  id                   String       @id @default(cuid())
+  name                 String
+  appId                String       @unique
+  appSecret            String
+  avatar               String?
+  intro                String?
+  status               Int          @default(1)
+  accessToken          String?
+  accessTokenExpiresAt DateTime?
+  lastTokenRefreshAt   DateTime?
+  lastDraftPushAt      DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  articles             Article[]
+  draftBatches         DraftBatch[]
+  tags                 TagMp[]
+
+  @@index([status])
+  @@map("mp_accounts")
+}
+
+model Article {
+  id              String      @id @default(cuid())
+  mpId            String?
+  mp              MpAccount?  @relation(fields: [mpId], references: [id], onDelete: SetNull)
+  title           String
+  digest          String?
+  author          String?
+  coverPath       String?
+  contentMarkdown String    @default("")
+  contentHtml     String?
+  sourceUrl       String?
+  status          String    @default("draft")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  draftItems      DraftItem[]
+
+  @@index([mpId])
+  @@index([status])
+  @@map("articles")
+}
+
+model DraftBatch {
+  id        String      @id @default(cuid())
+  mpId      String
+  mp        MpAccount   @relation(fields: [mpId], references: [id], onDelete: Cascade)
+  title     String
+  status    String      @default("draft")
+  mediaId   String?
+  error     String?
+  pushedAt  DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  items     DraftItem[]
+
+  @@index([mpId])
+  @@index([status])
+  @@map("draft_batches")
+}
+
+model DraftItem {
+  id           String     @id @default(cuid())
+  draftBatchId String
+  articleId    String
+  order        Int
+  draftBatch   DraftBatch @relation(fields: [draftBatchId], references: [id], onDelete: Cascade)
+  article      Article    @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([draftBatchId, articleId])
+  @@index([articleId])
+  @@map("draft_items")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String
+  cover     String?
+  intro     String?
+  status    Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  mps       TagMp[]
+
+  @@map("tags")
+}
+
+model TagMp {
+  id        String    @id @default(cuid())
+  tagId     String
+  mpId      String
+  tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  mp        MpAccount @relation(fields: [mpId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@unique([tagId, mpId])
+  @@map("tag_mps")
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  type        String
+  status      String    @default("pending")
+  payload     String    @default("{}")
+  result      String?
+  progress    Int       @default(0)
+  attempts    Int       @default(0)
+  maxRetries  Int       @default(3)
+  error       String?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  logs        JobLog[]
+
+  @@index([status, createdAt])
+  @@map("jobs")
+}
+
+model JobLog {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  level     String   @default("info")
+  message   String
+  meta      String?
+  createdAt DateTime @default(now())
+
+  @@index([jobId])
+  @@map("job_logs")
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

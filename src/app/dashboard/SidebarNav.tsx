@@ -1,0 +1,33 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { FileText, Home, ListChecks, PenLine, Send } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const links = [
+  { href: "/dashboard", label: "概览", icon: Home },
+  { href: "/dashboard/mps", label: "订阅号", icon: Send },
+  { href: "/dashboard/articles", label: "文章", icon: FileText },
+  { href: "/dashboard/drafts", label: "草稿", icon: PenLine },
+  { href: "/dashboard/jobs", label: "任务", icon: ListChecks }
+];
+
+export function SidebarNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav>
+      {links.map((item) => {
+        const Icon = item.icon;
+        const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
+        return (
+          <Link key={item.href} href={item.href} className={cn(active && "active")}>
+            <span className="nav-icon"><Icon size={15} /></span>
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
