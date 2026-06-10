@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, Home, ListChecks, Palette, PenLine, Send, Type } from "lucide-react";
+import { FileText, Home, ListChecks, Palette, PenLine, Send, Sparkles, Type } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "概览", icon: Home },
+  { href: "/dashboard/ai", label: "AI 工作台", icon: Sparkles },
   { href: "/dashboard/mps", label: "订阅号", icon: Send },
   { href: "/dashboard/articles", label: "文章", icon: FileText },
   { href: "/dashboard/drafts", label: "草稿", icon: PenLine },

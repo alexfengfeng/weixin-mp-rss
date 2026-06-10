@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Edit, ImagePlus, Plus, Send, Sparkles, Trash2 } from "lucide-react";
+import { CheckCircle2, Edit, ImagePlus, Plus, Send, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDelete } from "@/components/ui/alert-dialog";
@@ -19,6 +19,7 @@ import {
 type MpOption = { id: string; name: string };
 type WritingStyleOption = { id: string; name: string; description: string | null };
 type WechatTemplateOption = { id: string; name: string; description: string | null };
+type ArticleToolAction = "outline" | "title" | "digest" | "rewrite" | "expand" | "shorten" | "coverPrompt";
 
 type ArticleRow = {
   id: string;
@@ -41,6 +42,21 @@ type JobStatus = {
   result: string | null;
   error: string | null;
   logs?: Array<{ message: string; level: string }>;
+};
+type AiToolResult = {
+  action: string;
+  title?: string;
+  digest?: string;
+  contentMarkdown?: string;
+  coverPrompt?: string;
+  rationale?: string;
+};
+type PublishCheckResult = {
+  level: "pass" | "warn" | "block";
+  summary: string;
+  recommendedTemplateId?: string;
+  templateReason?: string;
+  issues: Array<{ severity: "info" | "warning" | "block"; message: string; suggestion?: string }>;
 };
 
 export function ArticleStatusBadge({ status }: { status: string }) {
@@ -147,7 +163,7 @@ export function ArticleActions({
   );
 }
 
-function ArticleEditor({
+export function ArticleEditor({
   title,
   trigger,
   method,
@@ -179,6 +195,10 @@ function ArticleEditor({
   const [templateId, setTemplateId] = useState(initialPreferences.templateId);
   const [generationPoints, setGenerationPoints] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [aiAction, setAiAction] = useState<ArticleToolAction>("outline");
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<AiToolResult | null>(null);
 
   useEffect(() => {
     if (!openSignal) return;
@@ -252,6 +272,41 @@ function ArticleEditor({
     setMessage("Kimi 已生成正文，请检查后保存");
   }
 
+  async function runAiTool() {
+    setAiLoading(true);
+    setMessage("AI 正在生成建议...");
+    const response = await fetch("/api/admin/ai/article-tools", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: aiAction,
+        title: form.title,
+        digest: form.digest,
+        contentMarkdown: form.contentMarkdown,
+        instruction: aiInstruction,
+        mpId: form.mpId || null,
+        styleId: stylePresetId
+      })
+    });
+    const json = await response.json().catch(() => null);
+    setAiLoading(false);
+
+    if (!response.ok) {
+      setMessage(json?.message || "AI 建议生成失败");
+      return;
+    }
+
+    setAiResult(json.data);
+    setMessage("AI 建议已生成，确认后再应用");
+  }
+
+  function applyAiResult(target: "title" | "digest" | "contentMarkdown") {
+    if (!aiResult?.[target]) return;
+    setField(target, aiResult[target] || "");
+    if (target === "contentMarkdown") setPreview("");
+    setMessage("AI 建议已应用，请检查后保存");
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     await save(false);
@@ -317,6 +372,46 @@ function ArticleEditor({
           />
           <label className="form-full">生成要点<textarea value={generationPoints} onChange={(e) => setGenerationPoints(e.target.value)} rows={3} placeholder="可选：给 Kimi 的写作要求或要点，不会保存到文章。" /></label>
           <TemplateSelect templates={wechatTemplates} templateId={templateId} onTemplateChange={setTemplateId} />
+          <div className="form-section form-full">
+            <div className="form-section-title">AI 编辑工具</div>
+            <div className="form-grid">
+              <label>
+                动作
+                <select value={aiAction} onChange={(event) => setAiAction(event.target.value as ArticleToolAction)}>
+                  <option value="outline">生成提纲</option>
+                  <option value="title">生成标题</option>
+                  <option value="digest">压缩摘要</option>
+                  <option value="rewrite">重写正文</option>
+                  <option value="expand">扩写正文</option>
+                  <option value="shorten">缩短正文</option>
+                  <option value="coverPrompt">生成封面提示词</option>
+                </select>
+              </label>
+              <label>
+                补充要求
+                <input value={aiInstruction} onChange={(event) => setAiInstruction(event.target.value)} placeholder="可选：更尖锐、保留结构、面向新手等" />
+              </label>
+              <div className="dialog-actions form-full">
+                <Button type="button" variant="secondary" disabled={aiLoading} onClick={runAiTool}>
+                  <Sparkles size={15} />{aiLoading ? "生成中" : "生成 AI 建议"}
+                </Button>
+              </div>
+            </div>
+            {aiResult ? (
+              <div className="panel" style={{ marginBottom: 0 }}>
+                {aiResult.rationale ? <p className="muted">{aiResult.rationale}</p> : null}
+                {aiResult.title ? <p><strong>标题：</strong>{aiResult.title}</p> : null}
+                {aiResult.digest ? <p><strong>摘要：</strong>{aiResult.digest}</p> : null}
+                {aiResult.coverPrompt ? <p><strong>封面提示词：</strong>{aiResult.coverPrompt}</p> : null}
+                {aiResult.contentMarkdown ? <pre style={{ whiteSpace: "pre-wrap" }}>{aiResult.contentMarkdown}</pre> : null}
+                <div className="actions">
+                  {aiResult.title ? <Button type="button" variant="secondary" size="sm" onClick={() => applyAiResult("title")}>应用标题</Button> : null}
+                  {aiResult.digest ? <Button type="button" variant="secondary" size="sm" onClick={() => applyAiResult("digest")}>应用摘要</Button> : null}
+                  {aiResult.contentMarkdown ? <Button type="button" variant="secondary" size="sm" onClick={() => applyAiResult("contentMarkdown")}>应用正文</Button> : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
           <label className="form-full">Markdown 正文<textarea value={form.contentMarkdown} onChange={(e) => setField("contentMarkdown", e.target.value)} rows={10} /></label>
           <label className="form-full">
             上传正文图片
@@ -405,6 +500,8 @@ function PublishArticleButton({ articleId, wechatTemplates }: { articleId: strin
   const [running, setRunning] = useState(false);
   const [open, setOpen] = useState(false);
   const [templateId, setTemplateId] = useState(getDefaultWechatTemplateId(wechatTemplates));
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<PublishCheckResult | null>(null);
 
   useEffect(() => {
     if (!jobId) return;
@@ -453,6 +550,26 @@ function PublishArticleButton({ articleId, wechatTemplates }: { articleId: strin
     }
   }
 
+  async function runPublishCheck() {
+    setChecking(true);
+    setMessage("AI 正在检查发布准备度...");
+    const response = await fetch(`/api/admin/articles/${encodeURIComponent(articleId)}/ai-check`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateId })
+    });
+    const json = await response.json().catch(() => null);
+    setChecking(false);
+
+    if (!response.ok) {
+      setMessage(json?.message || "发布检查失败");
+      return;
+    }
+
+    setCheckResult(json.data);
+    setMessage("发布检查已完成");
+  }
+
   return (
     <div className="stack">
       <Dialog open={open} onOpenChange={setOpen}>
@@ -462,6 +579,35 @@ function PublishArticleButton({ articleId, wechatTemplates }: { articleId: strin
         <DialogContent title="推送到草稿箱">
           <div className="form-grid">
             <TemplateSelect templates={wechatTemplates} templateId={templateId} onTemplateChange={setTemplateId} />
+            <div className="form-section form-full">
+              <div className="form-section-title">AI 发布检查</div>
+              <div className="dialog-actions">
+                <Button type="button" variant="secondary" disabled={checking} onClick={runPublishCheck}>
+                  <CheckCircle2 size={15} />{checking ? "检查中" : "运行发布检查"}
+                </Button>
+                {checkResult?.recommendedTemplateId && checkResult.recommendedTemplateId !== templateId ? (
+                  <Button type="button" variant="secondary" onClick={() => setTemplateId(checkResult.recommendedTemplateId || templateId)}>
+                    应用推荐模板
+                  </Button>
+                ) : null}
+              </div>
+              {checkResult ? (
+                <div className="panel" style={{ marginBottom: 0 }}>
+                  <p><strong>{checkResult.level === "pass" ? "可发布" : checkResult.level === "block" ? "有阻塞项" : "建议修改"}</strong>：{checkResult.summary}</p>
+                  {checkResult.templateReason ? <p className="muted">{checkResult.templateReason}</p> : null}
+                  {checkResult.issues.length ? (
+                    <ul>
+                      {checkResult.issues.map((issue, index) => (
+                        <li key={`${issue.message}-${index}`}>
+                          <Badge tone={issue.severity === "block" ? "danger" : issue.severity === "warning" ? "warning" : "info"}>{issue.severity}</Badge>{" "}
+                          {issue.message}{issue.suggestion ? `：${issue.suggestion}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className="muted">没有发现明显问题。</p>}
+                </div>
+              ) : null}
+            </div>
             <div className="dialog-actions form-full">
               {message ? <span className="muted">{message}</span> : null}
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>取消</Button>
