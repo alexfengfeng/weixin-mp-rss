@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getWritingStylePreset } from "@/lib/presets";
 
 const KIMI_API_URL = "https://api.moonshot.cn/v1/chat/completions";
 const DEFAULT_MODEL = "kimi-k2.6";
@@ -7,6 +8,8 @@ export type KimiArticleInput = {
   topic: string;
   points?: string | null;
   style?: string | null;
+  stylePresetId?: string | null;
+  stylePrompt?: string | null;
   mpName?: string | null;
   author?: string | null;
   length?: string | null;
@@ -40,10 +43,16 @@ type KimiResponse = {
 };
 
 export function buildKimiArticleMessages(input: KimiArticleInput): KimiMessage[] {
+  const stylePreset = getWritingStylePreset(input.stylePresetId);
+  const customStyle = input.style?.trim();
+  const baseStylePrompt = input.stylePrompt?.trim() || stylePreset.prompt;
+  const stylePrompt = customStyle
+    ? `${baseStylePrompt}\n自定义风格补充：${customStyle}`
+    : baseStylePrompt;
   const lines = [
     `主题：${input.topic.trim()}`,
     `要点：${input.points?.trim() || "请基于主题自行组织 3-5 个清晰要点"}`,
-    `风格：${input.style?.trim() || "清晰、克制、适合微信公众号阅读"}`,
+    `写作风格：${stylePrompt}`,
     `篇幅：${input.length?.trim() || "1000 字左右"}`,
     `目标订阅号：${input.mpName?.trim() || "未指定"}`,
     `作者：${input.author?.trim() || "未指定"}`

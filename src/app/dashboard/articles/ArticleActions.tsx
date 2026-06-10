@@ -3,13 +3,22 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Edit, ImagePlus, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Edit, ImagePlus, Plus, Send, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDelete } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import {
+  type ArticleEditorPreferenceFields,
+  getArticleEditorPreferences,
+  getDefaultWechatTemplateId,
+  getDefaultWritingStyleId,
+  withGeneratedArticlePreferences
+} from "./article-form-state";
 
 type MpOption = { id: string; name: string };
+type WritingStyleOption = { id: string; name: string; description: string | null };
+type WechatTemplateOption = { id: string; name: string; description: string | null };
 
 type ArticleRow = {
   id: string;
@@ -24,7 +33,15 @@ type ArticleRow = {
   status: string;
 };
 
-type ArticleFormValue = Partial<Omit<ArticleRow, "id">> & { id?: string };
+type ArticleFormValue = Partial<Omit<ArticleRow, "id">> & { id?: string } & ArticleEditorPreferenceFields;
+type JobStatus = {
+  id: string;
+  status: string;
+  progress: number;
+  result: string | null;
+  error: string | null;
+  logs?: Array<{ message: string; level: string }>;
+};
 
 export function ArticleStatusBadge({ status }: { status: string }) {
   const tone = status === "pushed" ? "success" : status === "archived" ? "neutral" : "info";
@@ -32,7 +49,15 @@ export function ArticleStatusBadge({ status }: { status: string }) {
   return <Badge tone={tone}>{label}</Badge>;
 }
 
-export function AddArticleDialog({ mps }: { mps: MpOption[] }) {
+export function AddArticleDialog({
+  mps,
+  writingStyles,
+  wechatTemplates
+}: {
+  mps: MpOption[];
+  writingStyles: WritingStyleOption[];
+  wechatTemplates: WechatTemplateOption[];
+}) {
   const [generatedArticle, setGeneratedArticle] = useState<ArticleFormValue | undefined>();
   const [openSignal, setOpenSignal] = useState(0);
 
@@ -43,13 +68,20 @@ export function AddArticleDialog({ mps }: { mps: MpOption[] }) {
 
   return (
     <div className="actions">
-      <GenerateArticleDialog mps={mps} onGenerated={useGeneratedArticle} />
+      <GenerateArticleDialog
+        mps={mps}
+        writingStyles={writingStyles}
+        wechatTemplates={wechatTemplates}
+        onGenerated={useGeneratedArticle}
+      />
       <ArticleEditor
         title="新建文章"
         trigger={<Button size="sm" variant="secondary"><Plus size={15} />新建文章</Button>}
         method="POST"
         url="/api/admin/articles"
         mps={mps}
+        writingStyles={writingStyles}
+        wechatTemplates={wechatTemplates}
       />
       {generatedArticle ? (
         <ArticleEditor
@@ -59,6 +91,8 @@ export function AddArticleDialog({ mps }: { mps: MpOption[] }) {
           url="/api/admin/articles"
           article={generatedArticle}
           mps={mps}
+          writingStyles={writingStyles}
+          wechatTemplates={wechatTemplates}
           openSignal={openSignal}
         />
       ) : null}
@@ -66,7 +100,17 @@ export function AddArticleDialog({ mps }: { mps: MpOption[] }) {
   );
 }
 
-export function ArticleActions({ article, mps }: { article: ArticleRow; mps: MpOption[] }) {
+export function ArticleActions({
+  article,
+  mps,
+  writingStyles,
+  wechatTemplates
+}: {
+  article: ArticleRow;
+  mps: MpOption[];
+  writingStyles: WritingStyleOption[];
+  wechatTemplates: WechatTemplateOption[];
+}) {
   const router = useRouter();
   const [message, setMessage] = useState("");
 
@@ -80,6 +124,7 @@ export function ArticleActions({ article, mps }: { article: ArticleRow; mps: MpO
   return (
     <div className="stack">
       <div className="actions nowrap">
+        <PublishArticleButton articleId={article.id} wechatTemplates={wechatTemplates} />
         <ArticleEditor
           title="编辑文章"
           trigger={<Button variant="secondary" size="icon" title="编辑" aria-label="编辑"><Edit size={14} /></Button>}
@@ -87,6 +132,8 @@ export function ArticleActions({ article, mps }: { article: ArticleRow; mps: MpO
           url={`/api/admin/articles/${encodeURIComponent(article.id)}`}
           article={article}
           mps={mps}
+          writingStyles={writingStyles}
+          wechatTemplates={wechatTemplates}
         />
         <ConfirmDelete
           title="删除文章"
@@ -107,6 +154,8 @@ function ArticleEditor({
   url,
   article,
   mps,
+  writingStyles,
+  wechatTemplates,
   openSignal
 }: {
   title: string;
@@ -115,6 +164,8 @@ function ArticleEditor({
   url: string;
   article?: ArticleFormValue;
   mps: MpOption[];
+  writingStyles: WritingStyleOption[];
+  wechatTemplates: WechatTemplateOption[];
   openSignal?: number;
 }) {
   const router = useRouter();
@@ -122,14 +173,24 @@ function ArticleEditor({
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState(article?.contentHtml || "");
   const [form, setForm] = useState(() => articleToForm(article));
+  const initialPreferences = getArticleEditorPreferences(article, writingStyles, wechatTemplates);
+  const [stylePresetId, setStylePresetId] = useState(initialPreferences.stylePresetId);
+  const [style, setStyle] = useState(initialPreferences.style);
+  const [templateId, setTemplateId] = useState(initialPreferences.templateId);
+  const [generationPoints, setGenerationPoints] = useState("");
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     if (!openSignal) return;
     setForm(articleToForm(article));
     setPreview(article?.contentHtml || "");
+    const preferences = getArticleEditorPreferences(article, writingStyles, wechatTemplates);
+    setStylePresetId(preferences.stylePresetId);
+    setStyle(preferences.style);
+    setTemplateId(preferences.templateId);
     setMessage("Kimi 已生成草稿，请检查后保存");
     setOpen(true);
-  }, [article, openSignal]);
+  }, [article, openSignal, writingStyles, wechatTemplates]);
 
   function setField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -150,8 +211,53 @@ function ArticleEditor({
     setMessage("图片已上传");
   }
 
+  async function generateIntoEditor() {
+    const topic = form.title.trim() || form.digest.trim();
+    if (!topic) {
+      setMessage("请先填写标题或摘要，再生成正文");
+      return;
+    }
+
+    setGenerating(true);
+    setMessage("正在调用 Kimi 生成正文...");
+    const response = await fetch("/api/admin/articles/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        topic,
+        points: generationPoints.trim() || form.digest.trim() || null,
+        stylePresetId,
+        style,
+        mpId: form.mpId || null,
+        author: form.author || null,
+        length: "1000 字左右"
+      })
+    });
+    const json = await response.json().catch(() => null);
+    setGenerating(false);
+
+    if (!response.ok) {
+      setMessage(json?.message || "生成失败");
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      title: json.data.title || current.title,
+      digest: json.data.digest || current.digest,
+      author: json.data.author || current.author,
+      contentMarkdown: json.data.contentMarkdown || current.contentMarkdown
+    }));
+    setPreview("");
+    setMessage("Kimi 已生成正文，请检查后保存");
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    await save(false);
+  }
+
+  async function save(publishAfterSave: boolean) {
     const response = await fetch(url, {
       method,
       headers: { "content-type": "application/json" },
@@ -160,6 +266,11 @@ function ArticleEditor({
     const json = await response.json().catch(() => null);
     setMessage(json?.message || (response.ok ? "已保存" : "保存失败"));
     if (response.ok) {
+      if (publishAfterSave && article?.id) {
+        await publishArticle(article.id, setMessage, templateId);
+        router.refresh();
+        return;
+      }
       setOpen(false);
       router.refresh();
     }
@@ -197,6 +308,15 @@ function ArticleEditor({
             <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "cover")} />
           </label>
           <label className="form-full">摘要<textarea value={form.digest} onChange={(e) => setField("digest", e.target.value)} rows={2} /></label>
+          <WritingStyleFields
+            writingStyles={writingStyles}
+            stylePresetId={stylePresetId}
+            style={style}
+            onStylePresetChange={setStylePresetId}
+            onStyleChange={setStyle}
+          />
+          <label className="form-full">生成要点<textarea value={generationPoints} onChange={(e) => setGenerationPoints(e.target.value)} rows={3} placeholder="可选：给 Kimi 的写作要求或要点，不会保存到文章。" /></label>
+          <TemplateSelect templates={wechatTemplates} templateId={templateId} onTemplateChange={setTemplateId} />
           <label className="form-full">Markdown 正文<textarea value={form.contentMarkdown} onChange={(e) => setField("contentMarkdown", e.target.value)} rows={10} /></label>
           <label className="form-full">
             上传正文图片
@@ -205,13 +325,180 @@ function ArticleEditor({
           {preview ? <div className="form-section"><div className="form-section-title">HTML 预览</div><div dangerouslySetInnerHTML={{ __html: preview }} /></div> : null}
           <div className="dialog-actions form-full">
             {message ? <span className="muted">{message}</span> : null}
+            <Button type="button" variant="secondary" disabled={generating} onClick={generateIntoEditor}><Sparkles size={15} />{generating ? "生成中" : "一键生成正文"}</Button>
             {method === "PUT" ? <Button type="button" variant="secondary" onClick={renderPreview}><ImagePlus size={15} />保存并预览</Button> : null}
+            {method === "PUT" && article?.id ? <Button type="button" variant="secondary" onClick={() => save(true)}><Send size={15} />保存并推送</Button> : null}
             <Button type="submit">保存</Button>
           </div>
         </form>
       </DialogContent>
     </Dialog>
   );
+}
+
+function WritingStyleFields({
+  writingStyles,
+  stylePresetId,
+  style,
+  onStylePresetChange,
+  onStyleChange
+}: {
+  writingStyles: WritingStyleOption[];
+  stylePresetId: string;
+  style: string;
+  onStylePresetChange: (value: string) => void;
+  onStyleChange: (value: string) => void;
+}) {
+  return (
+    <>
+      <label>
+        写作风格
+        <select value={stylePresetId} onChange={(event) => onStylePresetChange(event.target.value)}>
+          {writingStyles.map((preset) => (
+            <option key={preset.id} value={preset.id}>{preset.name}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        风格补充
+        <input value={style} onChange={(event) => onStyleChange(event.target.value)} placeholder="可选：更口语化、少用排比等" />
+      </label>
+      <div className="form-section form-full">
+        <div className="form-section-title">风格说明</div>
+        <p className="muted">{writingStyles.find((preset) => preset.id === stylePresetId)?.description}</p>
+      </div>
+    </>
+  );
+}
+
+function TemplateSelect({
+  templates,
+  templateId,
+  onTemplateChange
+}: {
+  templates: WechatTemplateOption[];
+  templateId: string;
+  onTemplateChange: (value: string) => void;
+}) {
+  return (
+    <>
+      <label className="form-full">
+        排版模板
+        <select value={templateId} onChange={(event) => onTemplateChange(event.target.value)}>
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>{template.name}</option>
+          ))}
+        </select>
+      </label>
+      <div className="form-section form-full">
+        <div className="form-section-title">模板说明</div>
+        <p className="muted">{templates.find((template) => template.id === templateId)?.description}</p>
+      </div>
+    </>
+  );
+}
+
+function PublishArticleButton({ articleId, wechatTemplates }: { articleId: string; wechatTemplates: WechatTemplateOption[] }) {
+  const router = useRouter();
+  const [jobId, setJobId] = useState("");
+  const [message, setMessage] = useState("");
+  const [running, setRunning] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [templateId, setTemplateId] = useState(getDefaultWechatTemplateId(wechatTemplates));
+
+  useEffect(() => {
+    if (!jobId) return;
+    let stopped = false;
+
+    async function poll() {
+      const response = await fetch(`/api/admin/jobs/${encodeURIComponent(jobId)}`);
+      const json = await response.json().catch(() => null);
+      if (!response.ok || stopped) return;
+
+      const job = json.data as JobStatus;
+      if (job.status === "completed") {
+        const result = parseJobResult(job.result);
+        setMessage(result?.mediaId ? `已创建草稿 ${result.mediaId}` : "已创建草稿");
+        setRunning(false);
+        router.refresh();
+        return;
+      }
+      if (job.status === "failed") {
+        setMessage(job.error || "推送失败");
+        setRunning(false);
+        router.refresh();
+        return;
+      }
+
+      const latestLog = job.logs?.[job.logs.length - 1]?.message;
+      setMessage(`${job.status === "pending" ? "排队中" : "推送中"} ${job.progress}%${latestLog ? ` · ${latestLog}` : ""}`);
+      window.setTimeout(poll, 2000);
+    }
+
+    poll();
+    return () => {
+      stopped = true;
+    };
+  }, [jobId, router]);
+
+  async function publish() {
+    setRunning(true);
+    setMessage("正在创建推送任务...");
+    const result = await publishArticle(articleId, setMessage, templateId);
+    setRunning(false);
+    if (result?.jobId) {
+      setRunning(true);
+      setJobId(result.jobId);
+      setOpen(false);
+    }
+  }
+
+  return (
+    <div className="stack">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button type="button" variant="secondary" size="sm" disabled={running}><Send size={15} />推送草稿箱</Button>
+        </DialogTrigger>
+        <DialogContent title="推送到草稿箱">
+          <div className="form-grid">
+            <TemplateSelect templates={wechatTemplates} templateId={templateId} onTemplateChange={setTemplateId} />
+            <div className="dialog-actions form-full">
+              {message ? <span className="muted">{message}</span> : null}
+              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>取消</Button>
+              <Button type="button" disabled={running} onClick={publish}><Send size={15} />确认推送</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {message ? <span className="muted">{message}</span> : null}
+    </div>
+  );
+}
+
+async function publishArticle(articleId: string, setMessage: (message: string) => void, templateId = "clean") {
+  const response = await fetch(`/api/admin/articles/${encodeURIComponent(articleId)}/publish`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ templateId })
+  });
+  const json = await response.json().catch(() => null);
+  if (!response.ok) {
+    setMessage(json?.message || "推送任务创建失败");
+    return null;
+  }
+
+  const jobId = json?.data?.job?.id as string | undefined;
+  setMessage(jobId ? `任务 ${jobId}` : json?.message || "草稿推送任务已创建");
+  return { jobId };
+}
+
+function parseJobResult(result: string | null): { mediaId?: string } | null {
+  if (!result) return null;
+  try {
+    return JSON.parse(result) as { mediaId?: string };
+  } catch {
+    return null;
+  }
 }
 
 function articleToForm(article?: ArticleFormValue) {
@@ -229,9 +516,13 @@ function articleToForm(article?: ArticleFormValue) {
 
 function GenerateArticleDialog({
   mps,
+  writingStyles,
+  wechatTemplates,
   onGenerated
 }: {
   mps: MpOption[];
+  writingStyles: WritingStyleOption[];
+  wechatTemplates: WechatTemplateOption[];
   onGenerated: (article: ArticleFormValue) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -240,7 +531,9 @@ function GenerateArticleDialog({
   const [form, setForm] = useState({
     topic: "",
     points: "",
-    style: "清晰、克制、适合公众号阅读",
+    stylePresetId: getDefaultWritingStyleId(writingStyles),
+    style: "",
+    templateId: getDefaultWechatTemplateId(wechatTemplates),
     length: "1000 字左右",
     mpId: "",
     author: ""
@@ -254,10 +547,11 @@ function GenerateArticleDialog({
     event.preventDefault();
     setLoading(true);
     setMessage("正在调用 Kimi 生成文章...");
+    const { templateId: _templateId, ...generationForm } = form;
     const response = await fetch("/api/admin/articles/generate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...form, mpId: form.mpId || null })
+      body: JSON.stringify({ ...generationForm, mpId: form.mpId || null })
     });
     const json = await response.json().catch(() => null);
     setLoading(false);
@@ -267,17 +561,28 @@ function GenerateArticleDialog({
       return;
     }
 
-    onGenerated({
-      mpId: form.mpId || null,
-      title: json.data.title,
-      digest: json.data.digest,
-      author: json.data.author || form.author,
-      coverPath: "",
-      contentMarkdown: json.data.contentMarkdown,
-      contentHtml: "",
-      sourceUrl: "",
-      status: "draft"
-    });
+    onGenerated(withGeneratedArticlePreferences(
+      {
+        mpId: form.mpId || null,
+        title: json.data.title,
+        digest: json.data.digest,
+        author: json.data.author || form.author,
+        coverPath: "",
+        contentMarkdown: json.data.contentMarkdown,
+        contentHtml: "",
+        sourceUrl: "",
+        status: "draft"
+      },
+      {
+        stylePresetId: form.stylePresetId,
+        style: form.style,
+        templateId: form.templateId
+      },
+      {
+        writingStyles,
+        wechatTemplates
+      }
+    ));
     setMessage("文章已生成");
     setOpen(false);
   }
@@ -292,8 +597,19 @@ function GenerateArticleDialog({
           <label className="form-full">主题<input value={form.topic} onChange={(e) => setField("topic", e.target.value)} placeholder="例如：独立开发者如何稳定运营订阅号" required /></label>
           <label>订阅号<select value={form.mpId} onChange={(e) => setField("mpId", e.target.value)}><option value="">未指定</option>{mps.map((mp) => <option key={mp.id} value={mp.id}>{mp.name}</option>)}</select></label>
           <label>作者<input value={form.author} onChange={(e) => setField("author", e.target.value)} placeholder="可选" /></label>
-          <label>风格<input value={form.style} onChange={(e) => setField("style", e.target.value)} /></label>
           <label>篇幅<select value={form.length} onChange={(e) => setField("length", e.target.value)}><option value="800 字左右">800 字左右</option><option value="1000 字左右">1000 字左右</option><option value="1500 字左右">1500 字左右</option><option value="2000 字左右">2000 字左右</option></select></label>
+          <WritingStyleFields
+            writingStyles={writingStyles}
+            stylePresetId={form.stylePresetId}
+            style={form.style}
+            onStylePresetChange={(value) => setField("stylePresetId", value)}
+            onStyleChange={(value) => setField("style", value)}
+          />
+          <TemplateSelect
+            templates={wechatTemplates}
+            templateId={form.templateId}
+            onTemplateChange={(value) => setField("templateId", value)}
+          />
           <label className="form-full">要点<textarea value={form.points} onChange={(e) => setField("points", e.target.value)} rows={5} placeholder="可选：每行一个要点，Kimi 会据此组织文章结构。" /></label>
           <div className="dialog-actions form-full">
             {message ? <span className="muted">{message}</span> : null}

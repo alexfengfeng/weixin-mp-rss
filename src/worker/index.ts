@@ -11,7 +11,7 @@ import { pushDraftBatch } from "@/server/drafts/push";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS || 4000);
 
-type PushDraftPayload = { draftId: string };
+type PushDraftPayload = { draftId: string; templateId?: string };
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -23,7 +23,7 @@ async function runJob(job: { id: string; type: string; payload: string }) {
   if (job.type === "push_wechat_draft") {
     const payload = parseJobPayload<PushDraftPayload>(job.payload);
     if (!payload.draftId) throw new Error("缺少 draftId");
-    const result = await pushDraftBatch(payload.draftId, job.id);
+    const result = await pushDraftBatch(payload.draftId, job.id, payload.templateId);
     await completePersistentJob(job.id, result);
     return;
   }

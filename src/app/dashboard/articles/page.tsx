@@ -4,6 +4,7 @@ import { CompactPanel, EmptyState, PageHeader, Truncate } from "@/components/adm
 import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { AddArticleDialog, ArticleActions, ArticleStatusBadge } from "./ArticleActions";
+import { listWechatStyleTemplates, listWritingStyles } from "@/server/templates/service";
 
 const PAGE_SIZE = 20;
 
@@ -19,7 +20,7 @@ export default async function ArticlesPage({
     mpId: params.mpId || undefined,
     status: params.status === "all" || params.status === undefined ? undefined : params.status
   };
-  const [articles, total, mps] = await Promise.all([
+  const [articles, total, mps, writingStyles, wechatTemplates] = await Promise.all([
     prisma.article.findMany({
       where,
       include: { mp: true },
@@ -28,7 +29,9 @@ export default async function ArticlesPage({
       skip: (page - 1) * PAGE_SIZE
     }),
     prisma.article.count({ where }),
-    prisma.mpAccount.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } })
+    prisma.mpAccount.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    listWritingStyles(true),
+    listWechatStyleTemplates(true)
   ]);
   const pages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
@@ -38,7 +41,7 @@ export default async function ArticlesPage({
         title="文章"
         description="本地 Markdown 创作文章库，可推送到订阅号草稿箱。"
         meta={<Badge tone="info">共 {total} 篇</Badge>}
-        actions={<AddArticleDialog mps={mps} />}
+        actions={<AddArticleDialog mps={mps} writingStyles={writingStyles} wechatTemplates={wechatTemplates} />}
       />
 
       <CompactPanel className="flush">
@@ -93,7 +96,7 @@ export default async function ArticlesPage({
                       contentHtml: article.contentHtml,
                       sourceUrl: article.sourceUrl,
                       status: article.status
-                    }} mps={mps} />
+                    }} mps={mps} writingStyles={writingStyles} wechatTemplates={wechatTemplates} />
                   </td>
                 </tr>
               ))}

@@ -10,6 +10,7 @@ describe("kimi article generation", () => {
     const messages = buildKimiArticleMessages({
       topic: "独立开发者如何做订阅号",
       points: "减少工具链\n保持稳定发布",
+      stylePresetId: "storytelling",
       style: "克制、真诚",
       length: "1200 字左右",
       mpName: "Alex 一人团队",
@@ -20,10 +21,20 @@ describe("kimi article generation", () => {
     expect(messages[0].content).toContain("微信公众号文章写作助手");
     expect(messages[1].content).toContain("独立开发者如何做订阅号");
     expect(messages[1].content).toContain("减少工具链");
+    expect(messages[1].content).toContain("故事");
     expect(messages[1].content).toContain("克制、真诚");
     expect(messages[1].content).toContain("1200 字左右");
     expect(messages[1].content).toContain("Alex 一人团队");
     expect(messages[1].content).toContain("Alex");
+  });
+
+  test("falls back to product insight writing style preset", () => {
+    const messages = buildKimiArticleMessages({
+      topic: "增长复盘",
+      stylePresetId: "missing"
+    });
+
+    expect(messages[1].content).toContain("产品洞察");
   });
 
   test("generates structured draft using Kimi JSON mode", async () => {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, Home, ListChecks, PenLine, Send } from "lucide-react";
+import { FileText, Home, ListChecks, Palette, PenLine, Send, Type } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -10,6 +10,8 @@ const links = [
   { href: "/dashboard/mps", label: "订阅号", icon: Send },
   { href: "/dashboard/articles", label: "文章", icon: FileText },
   { href: "/dashboard/drafts", label: "草稿", icon: PenLine },
+  { href: "/dashboard/writing-styles", label: "写作风格", icon: Type },
+  { href: "/dashboard/wechat-styles", label: "排版模板", icon: Palette },
   { href: "/dashboard/jobs", label: "任务", icon: ListChecks }
 ];
 

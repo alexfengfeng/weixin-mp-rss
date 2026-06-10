@@ -43,4 +43,21 @@ describe("draft markdown rendering", () => {
     expect(html).toContain("<p>这对组合的威力体现在一条自动化链路上：</p>");
     expect(html).toContain("<ol><li>捕捉碎片</li><li>自动归类</li><li>随时调用</li></ol>");
   });
+
+  test("applies wechat style templates when template id is provided", () => {
+    const clean = markdownToWechatHtml("# 标题\n\n正文\n\n1. 第一步\n2. 第二步\n\n---", "clean");
+    const magazine = markdownToWechatHtml("# 标题\n\n正文\n\n1. 第一步\n2. 第二步\n\n---", "magazine");
+    const compact = markdownToWechatHtml("# 标题\n\n正文\n\n1. 第一步\n2. 第二步\n\n---", "compact");
+
+    expect(clean).toContain('<h1 style="');
+    expect(clean).toContain('<p style="');
+    expect(clean).toContain('<ol style="');
+    expect(clean).toContain('<hr style="');
+    expect(magazine).not.toBe(clean);
+    expect(compact).not.toBe(clean);
+  });
+
+  test("falls back to clean style template for unknown ids", () => {
+    expect(markdownToWechatHtml("# 标题", "missing")).toBe(markdownToWechatHtml("# 标题", "clean"));
+  });
 });

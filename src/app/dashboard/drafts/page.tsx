@@ -24,13 +24,13 @@ export default async function DraftsPage({ searchParams }: { searchParams: Promi
   return (
     <>
       <PageHeader
-        title="草稿"
-        description="把一篇或多篇本地文章推送到目标订阅号草稿箱。"
+        title="草稿批次"
+        description="查看历史推送记录，或创建多图文批次；单篇文章可直接在文章页推送。"
         meta={<Badge tone="info">共 {total} 个</Badge>}
         actions={<CreateDraftDialog mps={mps} articles={articles} />}
       />
       <CompactPanel className="flush">
-        {drafts.length === 0 ? <EmptyState>暂无草稿批次。请先创建文章，再创建草稿批次。</EmptyState> : (
+        {drafts.length === 0 ? <EmptyState>暂无草稿批次。单篇文章可在文章页直接推送，多图文请在这里创建批次。</EmptyState> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>批次</th><th>订阅号</th><th>文章</th><th>状态</th><th>微信 media_id</th><th>时间</th><th>操作</th></tr></thead>

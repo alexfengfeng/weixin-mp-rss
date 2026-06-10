@@ -1,4 +1,9 @@
+import { getWechatStyleTemplate } from "@/lib/presets";
+import type { WechatStyleTemplate } from "@/lib/presets";
+import type { WechatStyleTemplateOption } from "@/server/templates/service";
+
 const IMAGE_RE = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+type RenderTemplate = Pick<WechatStyleTemplate, "styles"> | null;
 
 export function extractMarkdownImageUrls(markdown: string): string[] {
   const urls: string[] = [];
@@ -16,12 +21,19 @@ export function replaceImageUrlsInHtml(html: string, replacements: Map<string, s
   return next;
 }
 
-export function markdownToWechatHtml(markdown: string): string {
+export function markdownToWechatHtml(markdown: string, template?: string | WechatStyleTemplateOption): string {
+  const renderTemplate = resolveRenderTemplate(template);
   const blocks = normalizeMarkdown(markdown).split(/\n{2,}/);
   return blocks
-    .map((block) => renderBlock(block.trim()))
+    .map((block) => renderBlock(block.trim(), renderTemplate))
     .filter(Boolean)
     .join("\n");
+}
+
+function resolveRenderTemplate(template?: string | WechatStyleTemplateOption): RenderTemplate {
+  if (!template) return null;
+  if (typeof template === "string") return getWechatStyleTemplate(template);
+  return { styles: template.styles };
 }
 
 function normalizeMarkdown(markdown: string) {
@@ -30,41 +42,42 @@ function normalizeMarkdown(markdown: string) {
     .replace(/<br\s*\/?>/gi, "\n");
 }
 
-function renderBlock(block: string) {
+function renderBlock(block: string, template: RenderTemplate) {
   if (!block) return "";
 
   if (/^[-*_]{3,}$/.test(block)) {
-    return "<hr />";
+    return `<hr${styleAttr(template, "hr")} />`;
   }
 
   const heading = block.match(/^(#{1,3})\s+(.+)$/);
   if (heading) {
     const level = heading[1].length;
-    return `<h${level}>${renderInline(heading[2])}</h${level}>`;
+    const key = `h${level}` as "h1" | "h2" | "h3";
+    return `<h${level}${styleAttr(template, key)}>${renderInline(heading[2], template)}</h${level}>`;
   }
 
   const image = block.match(/^!\[([^\]]*)]\(([^)\s]+)(?:\s+"[^"]*")?\)$/);
   if (image) {
-    return `<p><img src="${escapeHtmlAttribute(image[2])}" alt="${escapeHtmlAttribute(image[1])}" /></p>`;
+    return `<p${styleAttr(template, "p")}><img${styleAttr(template, "img")} src="${escapeHtmlAttribute(image[2])}" alt="${escapeHtmlAttribute(image[1])}" /></p>`;
   }
 
   const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
   if (lines.every((line) => /^[-*]\s+/.test(line))) {
-    return `<ul>${lines.map((line) => `<li>${renderInline(line.replace(/^[-*]\s+/, ""))}</li>`).join("")}</ul>`;
+    return `<ul${styleAttr(template, "ul")}>${lines.map((line) => `<li${styleAttr(template, "li")}>${renderInline(line.replace(/^[-*]\s+/, ""), template)}</li>`).join("")}</ul>`;
   }
 
   if (lines.every((line) => /^\d+[.)、]\s+/.test(line))) {
-    return `<ol>${lines.map((line) => `<li>${renderInline(line.replace(/^\d+[.)、]\s+/, ""))}</li>`).join("")}</ol>`;
+    return `<ol${styleAttr(template, "ol")}>${lines.map((line) => `<li${styleAttr(template, "li")}>${renderInline(line.replace(/^\d+[.)、]\s+/, ""), template)}</li>`).join("")}</ol>`;
   }
 
   if (lines.some((line) => /^[-*]\s+/.test(line) || /^\d+[.)、]\s+/.test(line))) {
-    return renderMixedLines(lines);
+    return renderMixedLines(lines, template);
   }
 
-  return `<p>${renderInline(lines.join("<br />"))}</p>`;
+  return `<p${styleAttr(template, "p")}>${renderInline(lines.join("<br />"), template)}</p>`;
 }
 
-function renderMixedLines(lines: string[]) {
+function renderMixedLines(lines: string[], template: RenderTemplate) {
   const parts: string[] = [];
   let paragraph: string[] = [];
   let unordered: string[] = [];
@@ -72,19 +85,19 @@ function renderMixedLines(lines: string[]) {
 
   function flushParagraph() {
     if (paragraph.length === 0) return;
-    parts.push(`<p>${renderInline(paragraph.join("<br />"))}</p>`);
+    parts.push(`<p${styleAttr(template, "p")}>${renderInline(paragraph.join("<br />"), template)}</p>`);
     paragraph = [];
   }
 
   function flushUnordered() {
     if (unordered.length === 0) return;
-    parts.push(`<ul>${unordered.map((line) => `<li>${renderInline(line.replace(/^[-*]\s+/, ""))}</li>`).join("")}</ul>`);
+    parts.push(`<ul${styleAttr(template, "ul")}>${unordered.map((line) => `<li${styleAttr(template, "li")}>${renderInline(line.replace(/^[-*]\s+/, ""), template)}</li>`).join("")}</ul>`);
     unordered = [];
   }
 
   function flushOrdered() {
     if (ordered.length === 0) return;
-    parts.push(`<ol>${ordered.map((line) => `<li>${renderInline(line.replace(/^\d+[.)、]\s+/, ""))}</li>`).join("")}</ol>`);
+    parts.push(`<ol${styleAttr(template, "ol")}>${ordered.map((line) => `<li${styleAttr(template, "li")}>${renderInline(line.replace(/^\d+[.)、]\s+/, ""), template)}</li>`).join("")}</ol>`);
     ordered = [];
   }
 
@@ -112,13 +125,17 @@ function renderMixedLines(lines: string[]) {
   return parts.join("\n");
 }
 
-function renderInline(value: string) {
+function renderInline(value: string, template: RenderTemplate) {
   return escapeHtml(value)
     .replace(/!\[([^\]]*)]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_match, alt: string, url: string) => {
-      return `<img src="${escapeHtmlAttribute(url)}" alt="${escapeHtmlAttribute(alt)}" />`;
+      return `<img${styleAttr(template, "img")} src="${escapeHtmlAttribute(url)}" alt="${escapeHtmlAttribute(alt)}" />`;
     })
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+    .replace(/\*\*([^*]+)\*\*/g, `<strong${styleAttr(template, "strong")}>$1</strong>`)
+    .replace(/\[([^\]]+)]\((https?:\/\/[^)\s]+)\)/g, `<a${styleAttr(template, "a")} href="$2">$1</a>`);
+}
+
+function styleAttr(template: RenderTemplate, key: keyof WechatStyleTemplate["styles"]) {
+  return template ? ` style="${escapeHtmlAttribute(template.styles[key])}"` : "";
 }
 
 function escapeHtml(value: string) {

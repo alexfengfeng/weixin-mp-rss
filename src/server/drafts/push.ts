@@ -5,11 +5,13 @@ import { buildDraftArticlesPayload } from "@/server/drafts/payload";
 import { addWechatDraft, getOfficialAccessToken } from "@/server/wechat/official";
 import { uploadArticleImage, uploadPermanentImage } from "@/server/wechat/media";
 import { getDraftBatch } from "@/server/drafts/service";
+import { resolveWechatStyleTemplate } from "@/server/templates/service";
 
-export async function pushDraftBatch(draftId: string, jobId?: string) {
+export async function pushDraftBatch(draftId: string, jobId?: string, templateId = "clean") {
   const draft = await getDraftBatch(draftId);
   if (!draft) throw new Error("草稿批次不存在");
   if (draft.items.length === 0) throw new Error("草稿批次没有文章");
+  const template = await resolveWechatStyleTemplate(templateId);
 
   await updateJobProgressIfNeeded(jobId, 10, "获取订阅号 access_token");
   const accessToken = await getOfficialAccessToken(draft.mpId);
@@ -22,7 +24,7 @@ export async function pushDraftBatch(draftId: string, jobId?: string) {
     await updateJobProgressIfNeeded(jobId, 20 + index * 10, `上传封面图: ${article.title}`);
     const thumbMediaId = await uploadPermanentImage(accessToken, article.coverPath);
 
-    let contentHtml = markdownToWechatHtml(article.contentMarkdown);
+    let contentHtml = markdownToWechatHtml(article.contentMarkdown, template);
     const replacements = new Map<string, string>();
     for (const imageUrl of extractMarkdownImageUrls(article.contentMarkdown)) {
       if (!imageUrl.startsWith("/uploads/") && !imageUrl.startsWith("data/uploads/")) continue;
