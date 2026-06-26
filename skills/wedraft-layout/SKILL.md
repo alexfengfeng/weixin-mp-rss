@@ -2,19 +2,21 @@
 name: wedraft-layout
 description: |
   WeDraft 高级排版系统 Skill。当用户需要创建或排版微信公众号文章内容时使用。
-  支持 :::module 高级排版语法（39 个模块）、6+ 主题、发布就绪检查。
+  支持 :::module 高级排版语法（39 个模块）、20 主题、发布就绪检查、AI 写作增强、图片生成计划。
   通过 Discovery API 与 WeDraft 服务交互，实现 AI Agent 自动化排版与发布。
-  触发词：公众号排版、微信排版、WeDraft、:::module、排版模块、主题选择、文章就绪检查、discovery
+  触发词：公众号排版、微信排版、WeDraft、:::module、排版模块、主题选择、文章就绪检查、discovery、去AI味、humanize、封面图计划、信息图
 ---
 
 # WeDraft 高级排版系统
 
 ## 概述
 
-WeDraft 是一个微信公众号草稿箱发布台，支持高级排版系统：
-- **39 个 :::module 模块**（6 大类：opening/infographic/judgment/evidence/conversion/brand/sprint4）
-- **6+ 主题**（简洁通讯、产品报告、温和专栏、紧凑手册、评测强调、墨韵随笔）
-- **发布就绪检查**（inspect：标题/摘要/封面/图片/模块/字数）
+WeDraft 是一个微信公众号草稿箱发布台，支持完整的内容创作链路：
+- **39 个 :::module 模块**（7 大类：opening/infographic/judgment/evidence/conversion/brand/sprint4）
+- **20 个主题**（通用/专业/风格/文化 4 大类）
+- **AI 写作增强**：humanize 去痕、Writer Style Assistant 风格分析、Brand Profile 品牌档案、统一写作流程
+- **图片生成增强**：封面图 plan 模式、信息图 plan 模式、独立图片上传、providers 查询
+- **发布就绪检查**（inspect：标题/摘要/封面/图片/模块/字数/外部链接/CTA 建议）
 - **Agent Discovery API**（JSON 契约，供 AI Agent 自动化调用）
 
 ## 前置条件

@@ -214,6 +214,12 @@ export function ArticleEditor({
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [humanizing, setHumanizing] = useState(false);
   const [humanizeStrength, setHumanizeStrength] = useState<"light" | "authentic" | "aggressive">("authentic");
+  const [coverPlan, setCoverPlan] = useState<{ prompt: string; size: string; style: string; colorPalette: string[]; rationale: string } | null>(null);
+  const [coverPlanLoading, setCoverPlanLoading] = useState(false);
+  const [infographicPreset, setInfographicPreset] = useState("comparison");
+  const [infographicContent, setInfographicContent] = useState("");
+  const [infographicPlan, setInfographicPlan] = useState<{ prompt: string; size: string; style: string; layout: string; dataPoints: string[]; rationale: string } | null>(null);
+  const [infographicLoading, setInfographicLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   function handleInsert(newText: string, cursorPos: number) {
     setField("contentMarkdown", newText);
@@ -458,6 +464,64 @@ export function ArticleEditor({
     }
   }
 
+  async function handleCoverPlan() {
+    setCoverPlanLoading(true);
+    setMessage("正在生成封面图计划...");
+    try {
+      const res = await fetch("/api/admin/ai/cover-plan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: form.title,
+          digest: form.digest,
+          contentMarkdown: form.contentMarkdown
+        })
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setCoverPlan(json.data);
+        setMessage("封面图计划已生成，可复制 prompt 到图片生成工具");
+      } else {
+        setMessage(json.error || json.message || "生成失败");
+      }
+    } catch {
+      setMessage("网络错误");
+    } finally {
+      setCoverPlanLoading(false);
+    }
+  }
+
+  async function handleInfographicPlan() {
+    if (!infographicContent.trim()) {
+      setMessage("请输入信息图内容");
+      return;
+    }
+    setInfographicLoading(true);
+    setMessage("正在生成信息图计划...");
+    try {
+      const res = await fetch("/api/admin/ai/infographic", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          preset: infographicPreset,
+          title: form.title,
+          content: infographicContent
+        })
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setInfographicPlan(json.data);
+        setMessage("信息图计划已生成");
+      } else {
+        setMessage(json.error || json.message || "生成失败");
+      }
+    } catch {
+      setMessage("网络错误");
+    } finally {
+      setInfographicLoading(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
@@ -587,6 +651,57 @@ export function ArticleEditor({
             <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "body")} />
           </label>
           {preview ? <div className="form-section"><div className="form-section-title">HTML 预览</div><div dangerouslySetInnerHTML={{ __html: preview }} /></div> : null}
+          <div className="form-section form-full">
+            <div className="form-section-title">封面图计划（plan 模式）</div>
+            <div className="toolbar">
+              <Button type="button" variant="secondary" size="sm" disabled={coverPlanLoading} onClick={handleCoverPlan}>
+                <Sparkles size={14} />{coverPlanLoading ? "生成中..." : "生成封面计划"}
+              </Button>
+            </div>
+            {coverPlan ? (
+              <div className="compact-panel" style={{ marginTop: 8, padding: 12 }}>
+                <p><strong>尺寸：</strong>{coverPlan.size}　<strong>风格：</strong>{coverPlan.style}</p>
+                <p><strong>配色：</strong>{coverPlan.colorPalette.join(" / ")}</p>
+                <p><strong>设计理由：</strong>{coverPlan.rationale}</p>
+                <p><strong>Prompt（可复制）：</strong></p>
+                <pre style={{ background: "var(--panel-subtle)", padding: 8, borderRadius: 6, fontSize: 12, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{coverPlan.prompt}</pre>
+              </div>
+            ) : null}
+          </div>
+          <div className="form-section form-full">
+            <div className="form-section-title">信息图计划</div>
+            <div className="form-grid">
+              <label>
+                模板类型
+                <select value={infographicPreset} onChange={(e) => setInfographicPreset(e.target.value)}>
+                  <option value="comparison">对比型（comparison）</option>
+                  <option value="timeline">时间线型（timeline）</option>
+                  <option value="stats">数据统计型（stats）</option>
+                  <option value="flow">流程型（flow）</option>
+                  <option value="generic">通用型（generic）</option>
+                </select>
+              </label>
+              <label className="form-full">
+                信息图内容/数据描述
+                <textarea value={infographicContent} onChange={(e) => setInfographicContent(e.target.value)} rows={3} placeholder="如：Q1 营收 120 万，Q2 180 万，Q3 250 万，同比增长 40%" />
+              </label>
+            </div>
+            <div className="toolbar" style={{ marginTop: 4 }}>
+              <Button type="button" variant="secondary" size="sm" disabled={infographicLoading} onClick={handleInfographicPlan}>
+                <Sparkles size={14} />{infographicLoading ? "生成中..." : "生成信息图计划"}
+              </Button>
+            </div>
+            {infographicPlan ? (
+              <div className="compact-panel" style={{ marginTop: 8, padding: 12 }}>
+                <p><strong>尺寸：</strong>{infographicPlan.size}　<strong>风格：</strong>{infographicPlan.style}</p>
+                <p><strong>布局：</strong>{infographicPlan.layout}</p>
+                <p><strong>数据点：</strong>{infographicPlan.dataPoints.join("；")}</p>
+                <p><strong>设计理由：</strong>{infographicPlan.rationale}</p>
+                <p><strong>Prompt（可复制）：</strong></p>
+                <pre style={{ background: "var(--panel-subtle)", padding: 8, borderRadius: 6, fontSize: 12, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{infographicPlan.prompt}</pre>
+              </div>
+            ) : null}
+          </div>
           <div className="form-section form-full">
             <div className="form-section-title">去 AI 痕迹</div>
             <div className="toolbar">
