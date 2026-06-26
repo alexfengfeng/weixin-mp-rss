@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getWritingStylePreset } from "@/lib/presets";
+import { getBrandProfilePrompt, getBrandCoverPrompt } from "@/server/brand/service";
 
 const KIMI_API_URL = "https://api.moonshot.cn/v1/chat/completions";
 const DEFAULT_MODEL = "kimi-k2.6";
@@ -13,6 +14,8 @@ export type KimiArticleInput = {
   mpName?: string | null;
   author?: string | null;
   length?: string | null;
+  /** 品牌档案 prompt（自动注入） */
+  brandPrompt?: string | null;
 };
 
 export type KimiMessage = {
@@ -57,6 +60,9 @@ export function buildKimiArticleMessages(input: KimiArticleInput): KimiMessage[]
     `目标订阅号：${input.mpName?.trim() || "未指定"}`,
     `作者：${input.author?.trim() || "未指定"}`
   ];
+  if (input.brandPrompt?.trim()) {
+    lines.push(`品牌人设：${input.brandPrompt.trim()}`);
+  }
 
   return [
     {
@@ -66,7 +72,8 @@ export function buildKimiArticleMessages(input: KimiArticleInput): KimiMessage[]
         "只输出合法 JSON Object，不要输出解释文字。",
         "JSON 字段必须是 title、digest、author、contentMarkdown。",
         "contentMarkdown 只使用基础 Markdown：标题、段落、加粗、链接、图片占位文本。",
-        "不要生成封面图路径，不要编造已经上传的图片 URL。"
+        "不要生成封面图路径，不要编造已经上传的图片 URL。",
+        "如果提供了品牌人设，请让文章风格与人设保持一致。"
       ].join("\n")
     },
     {

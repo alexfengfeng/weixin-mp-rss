@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, Home, ListChecks, Palette, PenLine, Send, Sparkles, Type } from "lucide-react";
+import { Award, FileText, Home, ListChecks, Palette, PenLine, Send, Sparkles, Type } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -13,6 +13,7 @@ const links = [
   { href: "/dashboard/drafts", label: "草稿", icon: PenLine },
   { href: "/dashboard/writing-styles", label: "写作风格", icon: Type },
   { href: "/dashboard/wechat-styles", label: "排版模板", icon: Palette },
+  { href: "/dashboard/brand", label: "品牌档案", icon: Award },
   { href: "/dashboard/jobs", label: "任务", icon: ListChecks }
 ];
 

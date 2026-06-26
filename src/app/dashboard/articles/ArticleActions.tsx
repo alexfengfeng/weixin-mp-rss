@@ -212,6 +212,8 @@ export function ArticleEditor({
   const [imageLoading, setImageLoading] = useState<"cover" | "illustration" | "">("");
   const [generatedImage, setGeneratedImage] = useState<(GeneratedImageResult & { type: "cover" | "illustration" }) | null>(null);
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
+  const [humanizing, setHumanizing] = useState(false);
+  const [humanizeStrength, setHumanizeStrength] = useState<"light" | "authentic" | "aggressive">("authentic");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   function handleInsert(newText: string, cursorPos: number) {
     setField("contentMarkdown", newText);
@@ -427,6 +429,35 @@ export function ArticleEditor({
     }
   }
 
+  async function handleHumanize() {
+    if (!form.contentMarkdown.trim()) return;
+    setHumanizing(true);
+    setMessage("正在去 AI 痕迹...");
+    try {
+      const res = await fetch("/api/admin/ai/humanize", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          contentMarkdown: form.contentMarkdown,
+          strength: humanizeStrength,
+          styleId: stylePresetId || null
+        })
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setField("contentMarkdown", json.data.contentMarkdown);
+        const changeCount = json.data.changes?.length || 0;
+        setMessage(`去痕完成，共修改 ${changeCount} 处${json.data.summary ? "：" + json.data.summary : ""}`);
+      } else {
+        setMessage(json.error || json.message || "去痕失败");
+      }
+    } catch {
+      setMessage("网络错误");
+    } finally {
+      setHumanizing(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
@@ -556,6 +587,19 @@ export function ArticleEditor({
             <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "body")} />
           </label>
           {preview ? <div className="form-section"><div className="form-section-title">HTML 预览</div><div dangerouslySetInnerHTML={{ __html: preview }} /></div> : null}
+          <div className="form-section form-full">
+            <div className="form-section-title">去 AI 痕迹</div>
+            <div className="toolbar">
+              <select value={humanizeStrength} onChange={(e) => setHumanizeStrength(e.target.value as "light" | "authentic" | "aggressive")}>
+                <option value="light">轻度（保留 80%）</option>
+                <option value="authentic">自然（保留 60%）</option>
+                <option value="aggressive">深度重写（仅保留观点）</option>
+              </select>
+              <Button type="button" variant="secondary" disabled={humanizing || !form.contentMarkdown.trim()} onClick={handleHumanize}>
+                <Sparkles size={14} />{humanizing ? "去痕中..." : "去 AI 味"}
+              </Button>
+            </div>
+          </div>
           <div className="dialog-actions form-full">
             {message ? <span className="muted">{message}</span> : null}
             <Button type="button" variant="secondary" disabled={generating} onClick={generateIntoEditor}><Sparkles size={15} />{generating ? "生成中" : "一键生成正文"}</Button>
