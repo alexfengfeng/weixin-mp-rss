@@ -393,6 +393,33 @@ tbody tr:last-child td {
   flex-wrap: nowrap;
 }
 
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  min-height: 32px;
+  padding: 2px 4px 2px 2px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-subtle);
+}
+
+.chip .meta-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip button {
+  min-height: 24px;
+  padding: 3px 6px;
+  background: white;
+  color: #52525b;
+  border-color: var(--line);
+  font-size: 12px;
+}
+
 .stack {
   display: grid;
   gap: 6px;

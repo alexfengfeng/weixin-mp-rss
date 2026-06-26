@@ -58,6 +58,14 @@ type PublishCheckResult = {
   templateReason?: string;
   issues: Array<{ severity: "info" | "warning" | "block"; message: string; suggestion?: string }>;
 };
+type GeneratedImageResult = {
+  path: string;
+  storagePath: string;
+  size: string;
+  prompt: string;
+  mode: "text" | "edit";
+  references: string[];
+};
 
 export function ArticleStatusBadge({ status }: { status: string }) {
   const tone = status === "pushed" ? "success" : status === "archived" ? "neutral" : "info";
@@ -199,6 +207,9 @@ export function ArticleEditor({
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<AiToolResult | null>(null);
+  const [imageLoading, setImageLoading] = useState<"cover" | "illustration" | "">("");
+  const [generatedImage, setGeneratedImage] = useState<(GeneratedImageResult & { type: "cover" | "illustration" }) | null>(null);
+  const [referenceImages, setReferenceImages] = useState<string[]>([]);
 
   useEffect(() => {
     if (!openSignal) return;
@@ -216,7 +227,7 @@ export function ArticleEditor({
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  async function upload(file: File, target: "cover" | "body") {
+  async function upload(file: File, target: "cover" | "body" | "reference") {
     const body = new FormData();
     body.set("file", file);
     const response = await fetch("/api/admin/uploads", { method: "POST", body });
@@ -227,8 +238,9 @@ export function ArticleEditor({
     }
     const uploadedPath = json.data.path as string;
     if (target === "cover") setField("coverPath", uploadedPath);
-    else setField("contentMarkdown", `${form.contentMarkdown}\n\n![图片](${uploadedPath})`);
-    setMessage("图片已上传");
+    else if (target === "body") setField("contentMarkdown", `${form.contentMarkdown}\n\n![图片](${uploadedPath})`);
+    else setReferenceImages((current) => [...current, uploadedPath].slice(0, 16));
+    setMessage(target === "reference" ? "参考图已上传，生成图片时将自动使用图生图" : "图片已上传");
   }
 
   async function generateIntoEditor() {
@@ -305,6 +317,62 @@ export function ArticleEditor({
     setField(target, aiResult[target] || "");
     if (target === "contentMarkdown") setPreview("");
     setMessage("AI 建议已应用，请检查后保存");
+  }
+
+  async function generateImage(type: "cover" | "illustration") {
+    const topic = form.title.trim() || form.digest.trim() || form.contentMarkdown.slice(0, 80).trim();
+    if (!topic) {
+      setMessage("请先填写标题、摘要或正文，再生成图片");
+      return;
+    }
+
+    setImageLoading(type);
+    const usingReferences = referenceImages.length > 0;
+    setMessage(usingReferences
+      ? (type === "cover" ? "正在基于参考图生成封面..." : "正在基于参考图生成插图...")
+      : (type === "cover" ? "正在生成封面..." : "正在生成插图..."));
+    const response = await fetch("/api/admin/ai/images", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type,
+        title: form.title,
+        digest: form.digest,
+        contentMarkdown: form.contentMarkdown,
+        styleHint: `${writingStyles.find((item) => item.id === stylePresetId)?.name || ""} ${style}`.trim() || null,
+        referenceImages
+      })
+    });
+    const json = await response.json().catch(() => null);
+    setImageLoading("");
+
+    if (!response.ok) {
+      setMessage(json?.message || "图片生成失败");
+      return;
+    }
+
+    setGeneratedImage({ ...json.data, type });
+    setMessage(type === "cover"
+      ? `${json.data.mode === "edit" ? "图生图封面" : "封面"}已生成，确认后可应用`
+      : `${json.data.mode === "edit" ? "图生图插图" : "插图"}已生成（${json.data.size}），确认后可插入正文`);
+  }
+
+  function applyGeneratedImage() {
+    if (!generatedImage) return;
+    if (generatedImage.type === "cover") {
+      setField("coverPath", generatedImage.path);
+      setMessage("封面已应用，请保存文章");
+      return;
+    }
+
+    setField("contentMarkdown", `${form.contentMarkdown.trim()}\n\n![插图](${generatedImage.path})`.trim());
+    setPreview("");
+    setMessage("插图已插入正文，请保存文章");
+  }
+
+  function removeReferenceImage(image: string) {
+    setReferenceImages((current) => current.filter((item) => item !== image));
+    setMessage("参考图已移除");
   }
 
   async function submit(event: React.FormEvent) {
@@ -391,12 +459,42 @@ export function ArticleEditor({
                 补充要求
                 <input value={aiInstruction} onChange={(event) => setAiInstruction(event.target.value)} placeholder="可选：更尖锐、保留结构、面向新手等" />
               </label>
+              <label>
+                参考图
+                <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "reference")} />
+              </label>
               <div className="dialog-actions form-full">
                 <Button type="button" variant="secondary" disabled={aiLoading} onClick={runAiTool}>
                   <Sparkles size={15} />{aiLoading ? "生成中" : "生成 AI 建议"}
                 </Button>
+                <Button type="button" variant="secondary" disabled={Boolean(imageLoading)} onClick={() => generateImage("cover")}>
+                  <ImagePlus size={15} />{imageLoading === "cover" ? "生成中" : "生成封面"}
+                </Button>
+                <Button type="button" variant="secondary" disabled={Boolean(imageLoading)} onClick={() => generateImage("illustration")}>
+                  <ImagePlus size={15} />{imageLoading === "illustration" ? "生成中" : "生成插图"}
+                </Button>
               </div>
             </div>
+            {referenceImages.length ? (
+              <div className="panel" style={{ marginBottom: 0 }}>
+                <div className="row-title">
+                  <div className="row-main">
+                    <strong>图生图参考图</strong>
+                    <br />
+                    <span className="meta-text">生成封面或插图时会自动使用这些参考图，最多 16 张。</span>
+                  </div>
+                </div>
+                <div className="actions" style={{ marginTop: 10 }}>
+                  {referenceImages.map((image) => (
+                    <span key={image} className="chip">
+                      <img className="avatar" src={image} alt="" />
+                      <span className="meta-text">{image}</span>
+                      <button type="button" onClick={() => removeReferenceImage(image)}>移除</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {aiResult ? (
               <div className="panel" style={{ marginBottom: 0 }}>
                 {aiResult.rationale ? <p className="muted">{aiResult.rationale}</p> : null}
@@ -408,6 +506,25 @@ export function ArticleEditor({
                   {aiResult.title ? <Button type="button" variant="secondary" size="sm" onClick={() => applyAiResult("title")}>应用标题</Button> : null}
                   {aiResult.digest ? <Button type="button" variant="secondary" size="sm" onClick={() => applyAiResult("digest")}>应用摘要</Button> : null}
                   {aiResult.contentMarkdown ? <Button type="button" variant="secondary" size="sm" onClick={() => applyAiResult("contentMarkdown")}>应用正文</Button> : null}
+                </div>
+              </div>
+            ) : null}
+            {generatedImage ? (
+              <div className="panel" style={{ marginBottom: 0 }}>
+                <div className="row-title">
+                  <img className="avatar" src={generatedImage.path} alt="" />
+                  <div className="row-main">
+                    <strong>{generatedImage.type === "cover" ? "封面图" : "正文插图"} · {generatedImage.size} · {generatedImage.mode === "edit" ? "图生图" : "文生图"}</strong>
+                    <br />
+                    <span className="meta-text">{generatedImage.path}</span>
+                  </div>
+                </div>
+                <img src={generatedImage.path} alt="" style={{ display: "block", width: "100%", maxWidth: 420, marginTop: 10, borderRadius: 8 }} />
+                <p className="muted">{generatedImage.prompt}</p>
+                <div className="actions">
+                  <Button type="button" variant="secondary" size="sm" onClick={applyGeneratedImage}>
+                    {generatedImage.type === "cover" ? "应用为封面" : "插入正文"}
+                  </Button>
                 </div>
               </div>
             ) : null}

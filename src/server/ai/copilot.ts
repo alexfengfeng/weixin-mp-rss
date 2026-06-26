@@ -275,7 +275,7 @@ async function callKimiJson<T>(
         response_format: { type: "json_object" },
         thinking: { type: "disabled" },
         max_tokens: 4096,
-        temperature: 0.5
+        temperature: 0.6
       })
     });
   } catch {

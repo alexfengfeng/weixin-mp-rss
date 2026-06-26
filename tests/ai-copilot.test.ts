@@ -89,10 +89,10 @@ describe("AI Copilot helpers", () => {
   });
 
   test("generates topic ideas with JSON mode", async () => {
+    let requestBody: Record<string, unknown> | null = null;
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));
-      expect(body.response_format).toEqual({ type: "json_object" });
-      expect(body.messages[1].content).toContain("AI 发布台");
+      requestBody = body;
 
       return Response.json({
         choices: [{
@@ -124,5 +124,8 @@ describe("AI Copilot helpers", () => {
       templateId: "clean_newsletter",
       reason: "适合产品分析"
     }]);
+    expect(requestBody?.response_format).toEqual({ type: "json_object" });
+    expect(requestBody?.temperature).toBe(0.6);
+    expect(JSON.stringify(requestBody?.messages)).toContain("AI 发布台");
   });
 });
