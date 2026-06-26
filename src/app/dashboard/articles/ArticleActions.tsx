@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Edit, ImagePlus, Plus, Send, Sparkles, Trash2 } from "lucide-react";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDelete } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { ModuleInserter } from "@/components/ModuleInserter";
+import { EditorToolbar } from "@/components/EditorToolbar";
 import {
   type ArticleEditorPreferenceFields,
   getArticleEditorPreferences,
@@ -210,6 +212,16 @@ export function ArticleEditor({
   const [imageLoading, setImageLoading] = useState<"cover" | "illustration" | "">("");
   const [generatedImage, setGeneratedImage] = useState<(GeneratedImageResult & { type: "cover" | "illustration" }) | null>(null);
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  function handleInsert(newText: string, cursorPos: number) {
+    setField("contentMarkdown", newText);
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.selectionStart = cursorPos;
+      textareaRef.current.selectionEnd = cursorPos;
+      textareaRef.current.focus();
+    });
+  }
 
   useEffect(() => {
     if (!openSignal) return;
@@ -529,7 +541,16 @@ export function ArticleEditor({
               </div>
             ) : null}
           </div>
-          <label className="form-full">Markdown 正文<textarea value={form.contentMarkdown} onChange={(e) => setField("contentMarkdown", e.target.value)} rows={10} /></label>
+          <label className="form-full">
+            Markdown 正文
+            <EditorToolbar textareaRef={textareaRef} onInsert={handleInsert} />
+            <textarea
+              ref={textareaRef}
+              value={form.contentMarkdown}
+              onChange={(e) => setField("contentMarkdown", e.target.value)}
+              rows={10}
+            />
+          </label>
           <label className="form-full">
             上传正文图片
             <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "body")} />

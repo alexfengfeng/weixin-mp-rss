@@ -2,6 +2,8 @@ import { getWechatStyleTemplate, getWritingStylePreset, WECHAT_STYLE_TEMPLATES, 
 import type { WechatStyleTemplate } from "@/lib/presets";
 import { prisma } from "@/server/db/prisma";
 import { seedBuiltinTemplates } from "@/server/templates/seed";
+import type { ThemeStyles } from "@/server/layout/types";
+import { parseThemeStyles } from "@/server/layout/themes";
 
 const STYLE_KEYS = ["h1", "h2", "h3", "p", "ul", "ol", "li", "hr", "img", "strong", "a"] as const;
 
@@ -26,6 +28,9 @@ type WechatStyleRow = {
   status: number;
   isBuiltin: boolean;
   sortOrder: number;
+  version: number;
+  background: string;
+  themeMetaJson: string | null;
 };
 
 export type WritingStyleInput = {
@@ -46,8 +51,10 @@ export type WechatStyleTemplateInput = {
 
 export type WritingStyleOption = WritingStyleRow;
 
-export type WechatStyleTemplateOption = Omit<WechatStyleRow, "stylesJson"> & {
+export type WechatStyleTemplateOption = Omit<WechatStyleRow, "stylesJson" | "themeMetaJson"> & {
   styles: WechatStyles;
+  themeStyles: ThemeStyles;
+  tokens?: unknown;
 };
 
 export function normalizeWritingStyleInput(input: WritingStyleInput) {
@@ -163,24 +170,34 @@ export function rowToWritingStyle(row: WritingStyleRow): WritingStyleOption {
 }
 
 export function rowToWechatStyleTemplate(row: WechatStyleRow): WechatStyleTemplateOption {
+  const themeStyles = parseThemeStyles(row.stylesJson);
+  const styles = normalizeStyles(themeStyles.base);
+  let tokens: unknown = undefined;
+  if (row.themeMetaJson) {
+    try {
+      tokens = JSON.parse(row.themeMetaJson);
+    } catch {
+      /* ignore parse error */
+    }
+  }
   return {
     id: row.id,
     name: row.name,
     description: row.description,
-    styles: parseStylesJson(row.stylesJson),
+    styles,
+    themeStyles,
+    tokens,
     status: row.status,
     isBuiltin: row.isBuiltin,
-    sortOrder: row.sortOrder
+    sortOrder: row.sortOrder,
+    version: row.version,
+    background: row.background
   };
 }
 
 export function parseStylesJson(value: string): WechatStyles {
-  try {
-    const parsed = JSON.parse(value) as Partial<Record<StyleKey, unknown>>;
-    return normalizeStyles(parsed);
-  } catch {
-    return normalizeStyles({});
-  }
+  const themeStyles = parseThemeStyles(value);
+  return normalizeStyles(themeStyles.base);
 }
 
 function normalizeStyles(styles: Partial<Record<StyleKey, unknown>>): WechatStyles {
@@ -211,9 +228,12 @@ function builtinWechatStyleToOption(template: WechatStyleTemplate): WechatStyleT
     name: template.label,
     description: template.description,
     styles: template.styles,
+    themeStyles: { base: template.styles, modules: {} },
     status: 1,
     isBuiltin: true,
-    sortOrder: WECHAT_STYLE_TEMPLATES.findIndex((item) => item.id === template.id)
+    sortOrder: WECHAT_STYLE_TEMPLATES.findIndex((item) => item.id === template.id),
+    version: 1,
+    background: "plain"
   };
 }
 

@@ -14,17 +14,16 @@ describe("admin article crud helpers", () => {
       status: "draft"
     });
 
-    expect(input).toEqual({
-      mpId: null,
-      title: "标题",
-      digest: null,
-      author: null,
-      coverPath: null,
-      contentMarkdown: "**正文**",
-      contentHtml: "<p><strong>正文</strong></p>",
-      sourceUrl: "https://example.com/a",
-      status: "draft"
-    });
+    expect(input.mpId).toBeNull();
+    expect(input.title).toBe("标题");
+    expect(input.digest).toBeNull();
+    expect(input.author).toBeNull();
+    expect(input.coverPath).toBeNull();
+    expect(input.contentMarkdown).toBe("**正文**");
+    expect(input.contentHtml).toContain("<strong");
+    expect(input.contentHtml).toContain("正文");
+    expect(input.sourceUrl).toBe("https://example.com/a");
+    expect(input.status).toBe("draft");
   });
 });
 

@@ -23,7 +23,8 @@ vi.mock("@/server/db/prisma", () => ({
   }
 }));
 
-import { WECHAT_STYLE_TEMPLATES, WRITING_STYLE_PRESETS } from "@/lib/presets";
+import { WRITING_STYLE_PRESETS } from "@/lib/presets";
+import { BUILTIN_THEMES } from "@/server/layout/themes";
 import { seedBuiltinTemplates } from "@/server/templates/seed";
 
 describe("builtin template seed", () => {
@@ -54,7 +55,7 @@ describe("builtin template seed", () => {
   test("upserts all builtin wechat style templates with updated styles", async () => {
     await seedBuiltinTemplates({ force: true });
 
-    expect(mocks.wechatUpsert).toHaveBeenCalledTimes(WECHAT_STYLE_TEMPLATES.length);
+    expect(mocks.wechatUpsert).toHaveBeenCalledTimes(BUILTIN_THEMES.length);
     expect(mocks.wechatUpsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "bold_review" },
       update: expect.objectContaining({
@@ -65,7 +66,7 @@ describe("builtin template seed", () => {
     expect(mocks.wechatDeleteMany).toHaveBeenCalledWith({
       where: {
         isBuiltin: true,
-        id: { notIn: WECHAT_STYLE_TEMPLATES.map((template) => template.id) }
+        id: { notIn: BUILTIN_THEMES.map((theme) => theme.id) }
       }
     });
   });

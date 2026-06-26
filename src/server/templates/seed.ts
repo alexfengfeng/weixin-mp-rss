@@ -1,4 +1,5 @@
-import { WECHAT_STYLE_TEMPLATES, WRITING_STYLE_PRESETS } from "@/lib/presets";
+import { WRITING_STYLE_PRESETS } from "@/lib/presets";
+import { BUILTIN_THEMES } from "@/server/layout/themes";
 import { prisma } from "@/server/db/prisma";
 
 let seeded = false;
@@ -15,7 +16,7 @@ export async function seedBuiltinTemplates(options: { force?: boolean } = {}) {
   await prisma.wechatStyleTemplate.deleteMany({
     where: {
       isBuiltin: true,
-      id: { notIn: WECHAT_STYLE_TEMPLATES.map((template) => template.id) }
+      id: { notIn: BUILTIN_THEMES.map((theme) => theme.id) }
     }
   });
 
@@ -35,19 +36,27 @@ export async function seedBuiltinTemplates(options: { force?: boolean } = {}) {
     });
   }
 
-  for (const [index, template] of WECHAT_STYLE_TEMPLATES.entries()) {
+  for (const theme of BUILTIN_THEMES) {
+    const stylesJson = JSON.stringify({
+      base: theme.styles.base,
+      modules: theme.styles.modules || {}
+    });
+    const themeMetaJson = theme.tokens ? JSON.stringify(theme.tokens) : null;
     const data = {
-      name: template.label,
-      description: template.description,
-      stylesJson: JSON.stringify(template.styles),
+      name: theme.name,
+      description: theme.description,
+      stylesJson,
       status: 1,
       isBuiltin: true,
-      sortOrder: index
+      sortOrder: theme.sortOrder,
+      version: theme.version,
+      background: theme.background,
+      themeMetaJson
     };
     await prisma.wechatStyleTemplate.upsert({
-      where: { id: template.id },
+      where: { id: theme.id },
       update: data,
-      create: { id: template.id, ...data }
+      create: { id: theme.id, ...data }
     });
   }
 

@@ -1,10 +1,18 @@
-import { getWechatStyleTemplate } from "@/lib/presets";
-import type { WechatStyleTemplate } from "@/lib/presets";
+/**
+ * Markdown → 微信 HTML 渲染（薄封装）
+ *
+ * 此文件保持原有导出签名不变（markdownToWechatHtml / extractMarkdownImageUrls / replaceImageUrlsInHtml），
+ * 内部委托给 @/server/layout 的高级排版引擎，确保 push.ts 和 articles/admin.ts 无需改动即可获得 :::module 等新能力。
+ */
+
 import type { WechatStyleTemplateOption } from "@/server/templates/service";
+import { renderMarkdownWithTheme } from "@/server/layout";
+import { getDefaultTheme, resolveBuiltinTheme } from "@/server/layout/themes";
+import type { ResolvedTheme } from "@/server/layout/types";
 
 const IMAGE_RE = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-type RenderTemplate = Pick<WechatStyleTemplate, "styles"> | null;
 
+/** 从 Markdown 中提取所有图片 URL */
 export function extractMarkdownImageUrls(markdown: string): string[] {
   const urls: string[] = [];
   for (const match of markdown.matchAll(IMAGE_RE)) {
@@ -13,6 +21,7 @@ export function extractMarkdownImageUrls(markdown: string): string[] {
   return urls;
 }
 
+/** 在 HTML 中替换图片 URL（用于微信素材上传后替换本地 URL） */
 export function replaceImageUrlsInHtml(html: string, replacements: Map<string, string>): string {
   let next = html;
   for (const [from, to] of replacements) {
@@ -21,121 +30,48 @@ export function replaceImageUrlsInHtml(html: string, replacements: Map<string, s
   return next;
 }
 
+/**
+ * 将 Markdown 渲染为微信兼容 HTML。
+ * 支持标准 Markdown + :::module 高级排版语法。
+ *
+ * @param markdown 原始 Markdown 文本
+ * @param template 主题 ID 字符串、模板对象或 undefined（使用默认主题）
+ */
 export function markdownToWechatHtml(markdown: string, template?: string | WechatStyleTemplateOption): string {
-  const renderTemplate = resolveRenderTemplate(template);
-  const blocks = normalizeMarkdown(markdown).split(/\n{2,}/);
-  return blocks
-    .map((block) => renderBlock(block.trim(), renderTemplate))
-    .filter(Boolean)
-    .join("\n");
+  const theme = resolveTemplateToTheme(template);
+  return renderMarkdownWithTheme(markdown, theme);
 }
 
-function resolveRenderTemplate(template?: string | WechatStyleTemplateOption): RenderTemplate {
-  if (!template) return null;
-  if (typeof template === "string") return getWechatStyleTemplate(template);
-  return { styles: template.styles };
+/** 将模板参数转换为 ResolvedTheme */
+function resolveTemplateToTheme(template?: string | WechatStyleTemplateOption): ResolvedTheme {
+  if (!template) return getDefaultTheme();
+
+  if (typeof template === "string") {
+    // 支持别名（向后兼容 presets.ts 的 WECHAT_STYLE_ALIASES）
+    const aliased = resolveAlias(template);
+    return resolveBuiltinTheme(aliased) || resolveBuiltinTheme(template) || getDefaultTheme();
+  }
+
+  // WechatStyleTemplateOption（从 DB 来的模板对象）
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description || undefined,
+    tokens: template.tokens as ResolvedTheme["tokens"],
+    styles: template.themeStyles,
+    version: template.version,
+    background: template.background
+  };
 }
 
-function normalizeMarkdown(markdown: string) {
-  return markdown
-    .replace(/\r\n/g, "\n")
-    .replace(/<br\s*\/?>/gi, "\n");
-}
-
-function renderBlock(block: string, template: RenderTemplate) {
-  if (!block) return "";
-
-  if (/^[-*_]{3,}$/.test(block)) {
-    return `<hr${styleAttr(template, "hr")} />`;
-  }
-
-  const heading = block.match(/^(#{1,3})\s+(.+)$/);
-  if (heading) {
-    const level = heading[1].length;
-    const key = `h${level}` as "h1" | "h2" | "h3";
-    return `<h${level}${styleAttr(template, key)}>${renderInline(heading[2], template)}</h${level}>`;
-  }
-
-  const image = block.match(/^!\[([^\]]*)]\(([^)\s]+)(?:\s+"[^"]*")?\)$/);
-  if (image) {
-    return `<p${styleAttr(template, "p")}><img${styleAttr(template, "img")} src="${escapeHtmlAttribute(image[2])}" alt="${escapeHtmlAttribute(image[1])}" /></p>`;
-  }
-
-  const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
-  if (lines.every((line) => /^[-*]\s+/.test(line))) {
-    return `<ul${styleAttr(template, "ul")}>${lines.map((line) => `<li${styleAttr(template, "li")}>${renderInline(line.replace(/^[-*]\s+/, ""), template)}</li>`).join("")}</ul>`;
-  }
-
-  if (lines.every((line) => /^\d+[.)、]\s+/.test(line))) {
-    return `<ol${styleAttr(template, "ol")}>${lines.map((line) => `<li${styleAttr(template, "li")}>${renderInline(line.replace(/^\d+[.)、]\s+/, ""), template)}</li>`).join("")}</ol>`;
-  }
-
-  if (lines.some((line) => /^[-*]\s+/.test(line) || /^\d+[.)、]\s+/.test(line))) {
-    return renderMixedLines(lines, template);
-  }
-
-  return `<p${styleAttr(template, "p")}>${renderInline(lines.join("<br />"), template)}</p>`;
-}
-
-function renderMixedLines(lines: string[], template: RenderTemplate) {
-  const parts: string[] = [];
-  let paragraph: string[] = [];
-  let unordered: string[] = [];
-  let ordered: string[] = [];
-
-  function flushParagraph() {
-    if (paragraph.length === 0) return;
-    parts.push(`<p${styleAttr(template, "p")}>${renderInline(paragraph.join("<br />"), template)}</p>`);
-    paragraph = [];
-  }
-
-  function flushUnordered() {
-    if (unordered.length === 0) return;
-    parts.push(`<ul${styleAttr(template, "ul")}>${unordered.map((line) => `<li${styleAttr(template, "li")}>${renderInline(line.replace(/^[-*]\s+/, ""), template)}</li>`).join("")}</ul>`);
-    unordered = [];
-  }
-
-  function flushOrdered() {
-    if (ordered.length === 0) return;
-    parts.push(`<ol${styleAttr(template, "ol")}>${ordered.map((line) => `<li${styleAttr(template, "li")}>${renderInline(line.replace(/^\d+[.)、]\s+/, ""), template)}</li>`).join("")}</ol>`);
-    ordered = [];
-  }
-
-  for (const line of lines) {
-    if (/^[-*]\s+/.test(line)) {
-      flushParagraph();
-      flushOrdered();
-      unordered.push(line);
-      continue;
-    }
-    if (/^\d+[.)、]\s+/.test(line)) {
-      flushParagraph();
-      flushUnordered();
-      ordered.push(line);
-      continue;
-    }
-    flushUnordered();
-    flushOrdered();
-    paragraph.push(line);
-  }
-
-  flushParagraph();
-  flushUnordered();
-  flushOrdered();
-  return parts.join("\n");
-}
-
-function renderInline(value: string, template: RenderTemplate) {
-  return escapeHtml(value)
-    .replace(/!\[([^\]]*)]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_match, alt: string, url: string) => {
-      return `<img${styleAttr(template, "img")} src="${escapeHtmlAttribute(url)}" alt="${escapeHtmlAttribute(alt)}" />`;
-    })
-    .replace(/\*\*([^*]+)\*\*/g, `<strong${styleAttr(template, "strong")}>$1</strong>`)
-    .replace(/\[([^\]]+)]\((https?:\/\/[^)\s]+)\)/g, `<a${styleAttr(template, "a")} href="$2">$1</a>`);
-}
-
-function styleAttr(template: RenderTemplate, key: keyof WechatStyleTemplate["styles"]) {
-  return template ? ` style="${escapeHtmlAttribute(template.styles[key])}"` : "";
+/** 主题 ID 别名（向后兼容） */
+function resolveAlias(id: string): string {
+  const aliases: Record<string, string> = {
+    clean: "clean_newsletter",
+    magazine: "warm_column",
+    compact: "dense_playbook"
+  };
+  return aliases[id] || id;
 }
 
 function escapeHtml(value: string) {

@@ -5,9 +5,11 @@ describe("draft markdown rendering", () => {
   test("renders common markdown to wechat friendly html", () => {
     const html = markdownToWechatHtml("# 标题\n\n正文 **加粗**\n\n[链接](https://example.com)");
 
-    expect(html).toContain("<h1>标题</h1>");
-    expect(html).toContain("<p>正文 <strong>加粗</strong></p>");
-    expect(html).toContain('<a href="https://example.com">链接</a>');
+    expect(html).toContain("标题</h1>");
+    expect(html).toContain("正文 <strong");
+    expect(html).toContain("加粗</strong>");
+    expect(html).toContain('href="https://example.com"');
+    expect(html).toContain(">链接</a>");
   });
 
   test("extracts and replaces markdown image urls", () => {
@@ -24,24 +26,28 @@ describe("draft markdown rendering", () => {
   test("renders separators and ordered lists for wechat drafts", () => {
     const html = markdownToWechatHtml("前言\n\n---\n\n1. 第一步\n2. 第二步\n3. 第三步");
 
-    expect(html).toContain("<hr />");
+    expect(html).toContain("<hr");
     expect(html).not.toContain("<p>---</p>");
-    expect(html).toContain("<ol><li>第一步</li><li>第二步</li><li>第三步</li></ol>");
+    expect(html).toContain("第一步</li>");
+    expect(html).toContain("第二步</li>");
+    expect(html).toContain("第三步</li>");
   });
 
   test("normalizes pasted html breaks before rendering lists", () => {
     const html = markdownToWechatHtml("1. WorkBuddy 捕捉碎片<br />2. IMA 自动归类关联<br />3. WorkBuddy 随时调用");
 
-    expect(html).toContain("<ol>");
-    expect(html).toContain("<li>WorkBuddy 捕捉碎片</li>");
+    expect(html).toContain("<ol");
+    expect(html).toContain("WorkBuddy 捕捉碎片</li>");
     expect(html).not.toContain("&lt;br");
   });
 
   test("renders mixed paragraph and ordered list blocks", () => {
     const html = markdownToWechatHtml("这对组合的威力体现在一条自动化链路上：\n1. 捕捉碎片\n2. 自动归类\n3. 随时调用");
 
-    expect(html).toContain("<p>这对组合的威力体现在一条自动化链路上：</p>");
-    expect(html).toContain("<ol><li>捕捉碎片</li><li>自动归类</li><li>随时调用</li></ol>");
+    expect(html).toContain("这对组合的威力体现在一条自动化链路上：");
+    expect(html).toContain("捕捉碎片</li>");
+    expect(html).toContain("自动归类</li>");
+    expect(html).toContain("随时调用</li>");
   });
 
   test("applies wechat style templates when template id is provided", () => {
