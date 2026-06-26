@@ -45,7 +45,9 @@ export function getCapabilities(): Capabilities {
       "/api/discovery/layout/[name]",
       "/api/discovery/layout/validate",
       "/api/discovery/inspect",
-      "/api/discovery/providers"
+      "/api/discovery/providers",
+      "/api/discovery/skills",
+      "/api/discovery/skills/[id]"
     ],
     layout: { moduleCount: modules.length, categories },
     themes: { count: BUILTIN_THEMES.length, supportsCustom: true },

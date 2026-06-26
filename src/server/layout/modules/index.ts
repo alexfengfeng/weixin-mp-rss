@@ -60,6 +60,10 @@ import { questionDef, questionRender } from "@/server/layout/modules/sprint4/que
 import { resourceListDef, resourceListRender } from "@/server/layout/modules/sprint4/resource-list";
 import { comparisonTableDef, comparisonTableRender } from "@/server/layout/modules/sprint4/comparison-table";
 import { changelogDef, changelogRender } from "@/server/layout/modules/sprint4/changelog";
+import { imageLinkDef, imageLinkRender } from "@/server/layout/modules/sprint4/image-link";
+import { tagCloudDef, tagCloudRender } from "@/server/layout/modules/sprint4/tag-cloud";
+import { readingTimeDef, readingTimeRender } from "@/server/layout/modules/sprint4/reading-time";
+import { progressBarDef, progressBarRender } from "@/server/layout/modules/sprint4/progress-bar";
 
 let registered = false;
 
@@ -119,6 +123,10 @@ export function registerBuiltinModules(): void {
   registerModule(resourceListDef, resourceListRender);
   registerModule(comparisonTableDef, comparisonTableRender);
   registerModule(changelogDef, changelogRender);
+  registerModule(imageLinkDef, imageLinkRender);
+  registerModule(tagCloudDef, tagCloudRender);
+  registerModule(readingTimeDef, readingTimeRender);
+  registerModule(progressBarDef, progressBarRender);
 
   registered = true;
 }

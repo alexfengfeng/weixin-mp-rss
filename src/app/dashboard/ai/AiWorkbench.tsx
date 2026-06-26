@@ -106,6 +106,7 @@ export function AiWorkbench({
 
   return (
     <div className="stack">
+      <StyleAnalyzerTab />
       <form className="form-grid" onSubmit={generateTopics}>
         <label className="form-full">
           关键词
@@ -181,6 +182,109 @@ export function AiWorkbench({
           wechatTemplates={wechatTemplates}
           openSignal={openSignal}
         />
+      ) : null}
+    </div>
+  );
+}
+
+function StyleAnalyzerTab() {
+  const [samples, setSamples] = useState("");
+  const [authorName, setAuthorName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{
+    features: { sentenceStyle: string; tone: string; structure: string; vocabulary: string; rhythm: string; signatureExpressions: string[]; suitableTopics: string[] };
+    stylePrompt: string;
+    suggestedName: string;
+    description: string;
+  } | null>(null);
+  const [message, setMessage] = useState("");
+
+  async function analyze(e: React.FormEvent) {
+    e.preventDefault();
+    if (samples.trim().length < 50) {
+      setMessage("请提供至少 50 字的参考文章");
+      return;
+    }
+    setLoading(true);
+    setMessage("正在分析写作风格...");
+    try {
+      const res = await fetch("/api/admin/ai/analyze-style", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ samples, authorName: authorName || null })
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setResult(json.data);
+        setMessage("风格分析完成");
+      } else {
+        setMessage(json.error || json.message || "分析失败");
+      }
+    } catch {
+      setMessage("网络错误");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="compact-panel" style={{ marginBottom: 16 }}>
+      <div className="form-section-title">写作风格分析器</div>
+      <p className="muted" style={{ marginBottom: 8 }}>粘贴 1-3 篇参考文章（用 --- 分隔），AI 将提取写作风格指纹并生成可复用的风格 prompt。</p>
+      <form className="form-grid" onSubmit={analyze}>
+        <label>
+          参考作者名（可选）
+          <input value={authorName} onChange={(e) => setAuthorName(e.target.value)} placeholder="如：连岳、半佛仙人" />
+        </label>
+        <label className="form-full">
+          参考文章
+          <textarea value={samples} onChange={(e) => setSamples(e.target.value)} rows={8} placeholder="粘贴参考文章全文，多篇用 --- 分隔。至少 50 字。" required />
+        </label>
+        <div className="dialog-actions form-full">
+          {message ? <span className="muted">{message}</span> : null}
+          <Button type="submit" disabled={loading}><Sparkles size={15} />{loading ? "分析中" : "分析风格"}</Button>
+        </div>
+      </form>
+
+      {result ? (
+        <div className="compact-panel" style={{ marginTop: 12, padding: 16 }}>
+          <h3 style={{ margin: "0 0 8px" }}>{result.suggestedName}</h3>
+          <p className="muted">{result.description}</p>
+
+          <div style={{ marginTop: 12 }}>
+            <strong>风格特征</strong>
+            <div className="form-grid" style={{ marginTop: 8 }}>
+              <div><strong>句式：</strong><span className="meta-text">{result.features.sentenceStyle}</span></div>
+              <div><strong>语气：</strong><span className="meta-text">{result.features.tone}</span></div>
+              <div><strong>结构：</strong><span className="meta-text">{result.features.structure}</span></div>
+              <div><strong>词汇：</strong><span className="meta-text">{result.features.vocabulary}</span></div>
+              <div><strong>节奏：</strong><span className="meta-text">{result.features.rhythm}</span></div>
+            </div>
+          </div>
+
+          {result.features.signatureExpressions.length > 0 ? (
+            <div style={{ marginTop: 8 }}>
+              <strong>标志性表达：</strong>
+              {result.features.signatureExpressions.map((expr, i) => (
+                <span key={i} className="badge" style={{ marginLeft: 4, padding: "2px 8px", background: "var(--surface)", borderRadius: 4, fontSize: 12 }}>{expr}</span>
+              ))}
+            </div>
+          ) : null}
+
+          {result.features.suitableTopics.length > 0 ? (
+            <div style={{ marginTop: 8 }}>
+              <strong>适合题材：</strong>
+              {result.features.suitableTopics.map((topic, i) => (
+                <span key={i} className="meta-text" style={{ marginLeft: 4 }}>{topic}{i < result.features.suitableTopics.length - 1 ? "、" : ""}</span>
+              ))}
+            </div>
+          ) : null}
+
+          <div style={{ marginTop: 12 }}>
+            <strong>风格 Prompt（可复制到「写作风格」设置中）</strong>
+            <pre style={{ background: "var(--panel-subtle)", padding: 12, borderRadius: 8, fontSize: 13, whiteSpace: "pre-wrap", lineHeight: 1.6, marginTop: 4 }}>{result.stylePrompt}</pre>
+          </div>
+        </div>
       ) : null}
     </div>
   );
